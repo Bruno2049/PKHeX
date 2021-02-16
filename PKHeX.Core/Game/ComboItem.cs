@@ -1,11 +1,7 @@
 ﻿namespace PKHeX.Core
 {
     /// <summary>
-    /// Key Value pair for a displayed <see cref="string"/> and underlying <see cref="int"/> value.
+    /// Key Value pair for a displayed <see cref="T:System.String" /> and underlying <see cref="T:System.Int32" /> value.
     /// </summary>
-    public struct ComboItem
-    {
-        public string Text { get; set; }
-        public int Value { get; set; }
-    }
+    public record ComboItem(string Text, int Value);
 }

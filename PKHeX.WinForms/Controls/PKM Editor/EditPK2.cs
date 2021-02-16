@@ -1,4 +1,5 @@
-﻿using PKHeX.Core;
+﻿using System;
+using PKHeX.Core;
 
 namespace PKHeX.WinForms.Controls
 {
@@ -6,42 +7,55 @@ namespace PKHeX.WinForms.Controls
     {
         private void PopulateFieldsPK2()
         {
-            if (!(pkm is PK2 pk2))
-                return;
+            if (Entity is not GBPKM pk2 || Entity is not ICaughtData2 c2)
+                throw new FormatException(nameof(Entity));
 
+            if (Entity is SK2 sk2)
+            {
+                var sav = RequestSaveFile;
+                CoerceStadium2Language(sk2, sav);
+            }
             LoadMisc1(pk2);
             LoadMisc2(pk2);
 
-            TB_MetLevel.Text = pk2.Met_Level.ToString();
-            CB_MetLocation.SelectedValue = pk2.Met_Location;
-            CB_MetTimeOfDay.SelectedIndex = pk2.Met_TimeOfDay;
+            TID_Trainer.LoadIDValues(pk2);
+            TB_MetLevel.Text = c2.Met_Level.ToString();
+            CB_MetLocation.SelectedValue = c2.Met_Location;
+            CB_MetTimeOfDay.SelectedIndex = c2.Met_TimeOfDay;
 
             // Attempt to detect language
-            if (pk2.Japanese)
-                CB_Language.SelectedValue = 1;
-            else if (pk2.Korean)
-                CB_Language.SelectedValue = 8;
-            else
-            {
-                int lang = PKX.GetSpeciesNameLanguage(pk2.Species, pk2.Nickname, 2);
-                CB_Language.SelectedValue = lang > 0 ? lang : 2;
-            }
+            CB_Language.SelectedValue = pk2.GuessedLanguage();
 
             LoadPartyStats(pk2);
             UpdateStats();
         }
 
-        private PKM PreparePK2()
+        private static void CoerceStadium2Language(SK2 sk2, SaveFile sav)
         {
-            if (!(pkm is PK2 pk2))
-                return null;
+            if (sk2.Japanese == (sav.Language == 1))
+                return;
+
+            var la = new LegalityAnalysis(sk2);
+            if (la.Valid || !sk2.IsPossible(sav.Language == 1))
+                return;
+
+            sk2.SwapLanguage();
+            la = new LegalityAnalysis(sk2);
+            if (!la.Valid) // fail
+                sk2.SwapLanguage();
+        }
+
+        private GBPKM PreparePK2()
+        {
+            if (Entity is not GBPKM pk2 || Entity is not ICaughtData2 c2)
+                throw new FormatException(nameof(Entity));
 
             SaveMisc1(pk2);
             SaveMisc2(pk2);
 
-            pk2.Met_Level = Util.ToInt32(TB_MetLevel.Text);
-            pk2.Met_Location = WinFormsUtil.GetIndex(CB_MetLocation);
-            pk2.Met_TimeOfDay = CB_MetTimeOfDay.SelectedIndex;
+            c2.Met_Level = Util.ToInt32(TB_MetLevel.Text);
+            c2.Met_Location = WinFormsUtil.GetIndex(CB_MetLocation);
+            c2.Met_TimeOfDay = CB_MetTimeOfDay.SelectedIndex;
 
             SavePartyStats(pk2);
             pk2.FixMoves();

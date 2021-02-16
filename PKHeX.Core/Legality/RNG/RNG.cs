@@ -1,13 +1,24 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 namespace PKHeX.Core
 {
-    public class RNG
+    /// <summary>
+    /// 32 Bit Linear Congruential Random Number Generator
+    /// </summary>
+    /// <remarks>
+    /// Provides common RNG algorithms used by Generation 3 &amp; 4.
+    /// https://en.wikipedia.org/wiki/Linear_congruential_generator
+    /// </remarks>
+    public sealed class RNG
     {
-        public static readonly RNG LCRNG = new RNG(0x41C64E6D, 0x00006073, 0xEEB9EB65, 0x0A3561A1);
-        public static readonly RNG XDRNG = new RNG(0x000343FD, 0x00269EC3, 0xB9B33155, 0xA170F641);
-        public static readonly RNG ARNG  = new RNG(0x6C078965, 0x00000001, 0x9638806D, 0x69C77F93);
+        /// <summary> LCRNG used for Encryption and mainline game RNG calls. </summary>
+        public static readonly RNG LCRNG = new(0x41C64E6D, 0x00006073, 0xEEB9EB65, 0x0A3561A1);
+        /// <summary> LCRNG used by Colosseum & XD for game RNG calls. </summary>
+        public static readonly RNG XDRNG = new(0x000343FD, 0x00269EC3, 0xB9B33155, 0xA170F641);
+        /// <summary> Alternate LCRNG used by mainline game RNG calls to disassociate the seed from the <see cref="LCRNG"/>, for anti-shiny and other purposes. </summary>
+        public static readonly RNG ARNG  = new(0x6C078965, 0x00000001, 0x9638806D, 0x69C77F93);
 
         private readonly uint Mult, Add, rMult, rAdd;
 
@@ -59,7 +70,7 @@ namespace PKHeX.Core
             // with the current calc setup, the search loop's calculated value may be -1 (loop does subtraction)
             // since LCGs are linear (hence the name), there's no values in adjacent cells. (no collisions)
             // if we mark the prior adjacent cell, we eliminate the need to check flags twice on each loop.
-            uint right = mult * i + add;
+            uint right = (mult * i) + add;
             ushort val = (ushort) (right >> 16);
 
             f[val] = true; v[val] = (byte)i;
@@ -68,11 +79,28 @@ namespace PKHeX.Core
             // now the search only has to access the flags array once per loop.
         }
 
+        /// <summary>
+        /// Advances the RNG seed to the next state value.
+        /// </summary>
+        /// <param name="seed">Current seed</param>
+        /// <returns>Seed advanced a single time.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public uint Next(uint seed) => seed * Mult + Add;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public uint Prev(uint seed) => seed * rMult + rAdd;
+        public uint Next(uint seed) => (seed * Mult) + Add;
 
+        /// <summary>
+        /// Reverses the RNG seed to the previous state value.
+        /// </summary>
+        /// <param name="seed">Current seed</param>
+        /// <returns>Seed reversed a single time.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public uint Prev(uint seed) => (seed * rMult) + rAdd;
+
+        /// <summary>
+        /// Advances the RNG seed to the next state value a specified amount of times.
+        /// </summary>
+        /// <param name="seed">Current seed</param>
+        /// <param name="frames">Amount of times to advance.</param>
+        /// <returns>Seed advanced the specified amount of times.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint Advance(uint seed, int frames)
         {
@@ -80,6 +108,13 @@ namespace PKHeX.Core
                 seed = Next(seed);
             return seed;
         }
+
+        /// <summary>
+        /// Reverses the RNG seed to the previous state value a specified amount of times.
+        /// </summary>
+        /// <param name="seed">Current seed</param>
+        /// <param name="frames">Amount of times to reverse.</param>
+        /// <returns>Seed reversed the specified amount of times.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint Reverse(uint seed, int frames)
         {
@@ -92,7 +127,7 @@ namespace PKHeX.Core
         /// Generates an IV for each RNG call using the top 5 bits of frame seeds.
         /// </summary>
         /// <param name="seed">RNG seed</param>
-        /// <returns>Array of 6 IVs</returns>
+        /// <returns>Array of 6 IVs as <see cref="uint"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal uint[] GetSequentialIVsUInt32(uint seed)
         {
@@ -104,6 +139,12 @@ namespace PKHeX.Core
             }
             return ivs;
         }
+
+        /// <summary>
+        /// Generates an IV for each RNG call using the top 5 bits of frame seeds.
+        /// </summary>
+        /// <param name="seed">RNG seed</param>
+        /// <returns>Array of 6 IVs as <see cref="int"/>.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal int[] GetSequentialIVsInt32(uint seed)
         {
@@ -130,7 +171,7 @@ namespace PKHeX.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal IEnumerable<uint> RecoverLower16Bits(uint first, uint second)
         {
-            uint k1 = second - first * Mult;
+            uint k1 = second - (first * Mult);
             for (uint i = 0, k3 = k1; i <= 255; ++i, k3 -= k2)
             {
                 ushort val = (ushort)(k3 >> 16);
@@ -138,6 +179,7 @@ namespace PKHeX.Core
                     yield return Prev(first | i << 8 | low8[val]);
             }
         }
+
         /// <summary>
         /// Gets the origin seeds for two 16 bit rand() calls (ignoring a rand() in between) using a meet-in-the-middle approach.
         /// </summary>
@@ -152,7 +194,7 @@ namespace PKHeX.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal IEnumerable<uint> RecoverLower16BitsGap(uint first, uint third)
         {
-            uint k1 = third - first * k0g;
+            uint k1 = third - (first * k0g);
             for (uint i = 0, k3 = k1; i <= 255; ++i, k3 -= k2s)
             {
                 ushort val = (ushort)(k3 >> 16);
@@ -160,6 +202,7 @@ namespace PKHeX.Core
                     yield return Prev(first | i << 8 | g_low8[val]);
             }
         }
+
         /// <summary>
         /// Gets the origin seeds for two successive 16 bit rand() calls using a Euclidean division approach.
         /// </summary>
@@ -175,9 +218,10 @@ namespace PKHeX.Core
         internal IEnumerable<uint> RecoverLower16BitsEuclid16(uint first, uint second)
         {
             const int bitshift = 32;
-            const long inc = 0x100000000; // 1 << 32;
+            const long inc = 1L << bitshift;
             return GetPossibleSeedsEuclid(first, second, bitshift, inc);
         }
+
         /// <summary>
         /// Gets the origin seeds for two successive 15 bit rand() calls using a Euclidean division approach.
         /// </summary>
@@ -194,23 +238,49 @@ namespace PKHeX.Core
         internal IEnumerable<uint> RecoverLower16BitsEuclid15(uint first, uint second)
         {
             const int bitshift = 31;
-            const long inc = 0x080000000; // 1 << 31;
+            const long inc = 1L << bitshift;
             return GetPossibleSeedsEuclid(first, second, bitshift, inc);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private IEnumerable<uint> GetPossibleSeedsEuclid(uint first, uint second, int bitshift, long inc)
         {
-            long t = second - Mult * first - t0;
+            long t = second - (Mult * first) - t0;
             long kmax = (((t1 - t) >> bitshift) << bitshift) + t;
             for (long k = t; k <= kmax; k += inc)
             {
                 // compute modulo in steps for reuse in yielded value (x % Mult)
                 long fix = k / Mult;
-                long remainder = k - Mult * fix;
+                long remainder = k - (Mult * fix);
                 if (remainder >> 16 == 0)
                     yield return Prev(first | (uint) fix);
             }
         }
+    }
+
+    public enum RNGType
+    {
+        /// <summary> No RNG type specified </summary>
+        None,
+
+        /// <summary> <see cref="RNG.LCRNG"/> </summary>
+        LCRNG,
+
+        /// <summary> <see cref="RNG.XDRNG"/> </summary>
+        XDRNG,
+
+        /// <summary> <see cref="RNG.ARNG"/> </summary>
+        ARNG,
+    }
+
+    public static class RNGTypeUtil
+    {
+        public static RNG GetRNG(this RNGType type) => type switch
+        {
+            RNGType.LCRNG => RNG.LCRNG,
+            RNGType.XDRNG => RNG.XDRNG,
+            RNGType.ARNG => RNG.ARNG,
+            _ => throw new ArgumentException(nameof(type))
+        };
     }
 }
